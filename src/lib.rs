@@ -1,13 +1,7 @@
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::match_same_arms)]
 
-#[macro_use]
-extern crate log;
-
-use pulldown_cmark::Event::{
-    Code, End, FootnoteReference, HardBreak, Html, Rule, SoftBreak, Start, TaskListMarker, Text,
-};
-use pulldown_cmark::{Options, Parser, Tag};
+use log::debug;
+use pulldown_cmark::{Event, Options, Parser, Tag};
 
 #[must_use]
 pub fn strip_markdown(markdown: &str) -> String {
@@ -23,82 +17,30 @@ pub fn strip_markdown(markdown: &str) -> String {
         debug!("{:?}", event);
         match event {
             // The start and end events don't contain the text inside the tag. That's handled by the `Event::Text` arm.
-            Start(tag) => start_tag(&tag, &mut buffer),
-            End(tag) => end_tag(&tag, &mut buffer),
-            Text(text) => {
-                debug!("Pushing {}", &text);
-                buffer.push_str(&text);
-            }
-            Code(code) => buffer.push_str(&code),
-            Html(_) => (),
-            FootnoteReference(_) => (),
-            TaskListMarker(_) => (),
-            SoftBreak | HardBreak => fresh_line(&mut buffer),
-            Rule => fresh_line(&mut buffer),
+            Event::Start(tag) => start_tag(&tag, &mut buffer),
+            Event::End(tag) => end_tag(&tag, &mut buffer),
+            Event::Text(content) | Event::Code(content) => buffer.push_str(&content),
+            Event::SoftBreak => buffer.push(' '),
+            _ => (),
         }
     }
-    buffer
+    buffer.trim().to_string()
 }
 
 fn start_tag(tag: &Tag, buffer: &mut String) {
     match tag {
-        Tag::CodeBlock(_info) => fresh_hard_break(buffer),
-        Tag::List(_number) => fresh_line(buffer),
-        Tag::Link(_link_type, _dest, title) | Tag::Image(_link_type, _dest, title) => {
-            if !title.is_empty() {
-                buffer.push_str(&title);
-            }
-        }
-        Tag::Paragraph => (),
-        Tag::Heading(_) => (),
-        Tag::Table(_alignments) => (),
-        Tag::TableHead => (),
-        Tag::TableRow => (),
-        Tag::TableCell => (),
-        Tag::BlockQuote => (),
-        Tag::Item => (),
-        Tag::Emphasis => (),
-        Tag::Strong => (),
-        Tag::FootnoteDefinition(_) => (),
-        Tag::Strikethrough => (),
+        Tag::Link(_, _, title) | Tag::Image(_, _, title) => buffer.push_str(&title),
+        Tag::Item => buffer.push_str("• "),
+        _ => (),
     }
 }
 
 fn end_tag(tag: &Tag, buffer: &mut String) {
     match tag {
-        Tag::Paragraph => (),
-        Tag::Table(_) => {
-            fresh_line(buffer);
-        }
-        Tag::TableHead => {
-            fresh_line(buffer);
-        }
-        Tag::TableRow => {
-            fresh_line(buffer);
-        }
-        Tag::Heading(_) => fresh_line(buffer),
-        Tag::Emphasis => (),
-        Tag::TableCell => (),
-        Tag::Strong => (),
-        Tag::Link(_, _, _) => (),
-        Tag::BlockQuote => fresh_line(buffer),
-        Tag::CodeBlock(_) => fresh_line(buffer),
-        Tag::List(_) => (),
-        Tag::Item => fresh_line(buffer),
-        Tag::Image(_, _, _) => (), // shouldn't happen, handled in start
-        Tag::FootnoteDefinition(_) => (),
-        Tag::Strikethrough => (),
+        Tag::Paragraph | Tag::Table(_) | Tag::Heading(_) | Tag::List(_) => buffer.push_str("\n\n"),
+        Tag::CodeBlock(_) | Tag::TableHead | Tag::TableRow | Tag::Item => buffer.push('\n'),
+        _ => (),
     }
-}
-
-fn fresh_line(buffer: &mut String) {
-    debug!("Pushing \\n");
-    buffer.push('\n');
-}
-
-fn fresh_hard_break(buffer: &mut String) {
-    debug!("Pushing \\n\\n");
-    buffer.push_str("\n\n");
 }
 
 #[cfg(test)]
@@ -120,8 +62,12 @@ mod tests {
 
     #[test]
     fn basic_header() {
-        let markdown = r#"# Header"#;
-        let expected = "Header\n";
+        let markdown = r#"# Header
+
+End paragraph."#;
+        let expected = "Header
+
+End paragraph.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
@@ -130,8 +76,11 @@ mod tests {
         let markdown = r#"
 Header
 ======
-"#;
-        let expected = "Header\n";
+
+End paragraph."#;
+        let expected = "Header
+
+End paragraph.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
@@ -144,8 +93,8 @@ Header
 
     #[test]
     fn strikethrough() {
-        let markdown = r#"~~strikethrough~~"#;
-        let expected = "strikethrough";
+        let markdown = r#"This was ~~erased~~ deleted."#;
+        let expected = "This was erased deleted.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
@@ -159,13 +108,11 @@ Header
 4. And another item.
 "#;
 
-        let expected = r#"
-First ordered list item
-Another item
-Actual numbers don't matter, just that it's a number
-Ordered sub-list
-And another item.
-"#;
+        let expected = r#"• First ordered list item
+• Another item
+• Actual numbers don't matter, just that it's a number
+• Ordered sub-list
+• And another item."#;
         assert_eq!(strip_markdown(markdown), expected);
     }
 
@@ -175,10 +122,8 @@ And another item.
 * alpha
 * beta
 "#;
-        let expected = r#"
-alpha
-beta
-"#;
+        let expected = r#"• alpha
+• beta"#;
         assert_eq!(strip_markdown(markdown), expected);
     }
 
@@ -190,63 +135,81 @@ beta
 "#;
         let expected = r#"Title
 
-alpha
-beta
-"#;
+• alpha
+• beta"#;
         assert_eq!(strip_markdown(markdown), expected);
     }
 
     #[test]
     fn basic_link() {
-        let markdown = "[I'm an inline-style link](https://www.google.com)";
-        let expected = "I'm an inline-style link";
+        let markdown = "I'm an [inline-style link](https://www.google.com).";
+        let expected = "I'm an inline-style link.";
         assert_eq!(strip_markdown(markdown), expected)
     }
 
     #[ignore]
     #[test]
     fn link_with_itself() {
-        let markdown = "[https://www.google.com]";
-        let expected = "https://www.google.com";
+        let markdown = "Go to [https://www.google.com].";
+        let expected = "Go to https://www.google.com.";
         assert_eq!(strip_markdown(markdown), expected)
     }
 
     #[test]
     fn basic_image() {
-        let markdown = "![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png)";
-        let expected = "alt text";
+        let markdown = "As displayed in ![img alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png).";
+        let expected = "As displayed in img alt text.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
     #[test]
     fn inline_code() {
-        let markdown = "`inline code`";
-        let expected = "inline code";
+        let markdown = "This is `inline code`.";
+        let expected = "This is inline code.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
     #[test]
     fn code_block() {
-        let markdown = r#"
+        let markdown = r#"Start paragraph.
 ```javascript
 var s = "JavaScript syntax highlighting";
 alert(s);
-```"#;
-        let expected = r#"
+```
+End paragraph."#;
+        let expected = r#"Start paragraph.
 
 var s = "JavaScript syntax highlighting";
 alert(s);
 
-"#;
+End paragraph."#;
         assert_eq!(strip_markdown(markdown), expected);
     }
 
     #[test]
     fn block_quote() {
-        let markdown = r#"> Blockquotes are very handy in email to emulate reply text.
-> This line is part of the same quote."#;
-        let expected = "Blockquotes are very handy in email to emulate reply text.
-This line is part of the same quote.\n";
+        let markdown = r#"Start paragraph.
+
+> Blockquotes are very handy in email to emulate reply text.
+> This line is part of the same quote.
+
+End paragraph."#;
+        let expected = "Start paragraph.
+
+Blockquotes are very handy in email to emulate reply text. This line is part of the same quote.
+
+End paragraph.";
+        assert_eq!(strip_markdown(markdown), expected);
+    }
+
+    #[test]
+    fn paragraphs() {
+        let markdown = r#"Paragraph 1.
+
+Paragraph 2."#;
+        let expected = "Paragraph 1.
+
+Paragraph 2.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 }
