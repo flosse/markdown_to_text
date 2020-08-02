@@ -1,10 +1,9 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use log::debug;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 
 #[must_use]
-pub fn strip_markdown(markdown: &str) -> String {
+pub fn convert(markdown: &str) -> String {
     // GFM tables and tasks lists are not enabled.
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -13,9 +12,8 @@ pub fn strip_markdown(markdown: &str) -> String {
     let mut tags_stack = Vec::new();
     let mut buffer = String::new();
 
-    // For each event we push into the buffer to produce the 'stripped' version.
+    // For each event we push into the buffer to produce the plain text version.
     for event in parser {
-        debug!("{:?}", event);
         match event {
             // The start and end events don't contain the text inside the tag. That's handled by the `Event::Text` arm.
             Event::Start(tag) => {
@@ -98,19 +96,20 @@ fn is_strikethrough(tag: &Tag) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::convert;
+
     #[test]
     fn basic_inline_strong() {
         let markdown = r#"**Hello**"#;
         let expected = "Hello";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
     fn basic_inline_emphasis() {
         let markdown = r#"_Hello_"#;
         let expected = "Hello";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -125,7 +124,7 @@ End paragraph."#;
 Sub header
 
 End paragraph.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -138,21 +137,21 @@ End paragraph."#;
         let expected = "Header
 
 End paragraph.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
     fn strong_emphasis() {
         let markdown = r#"**asterisks and _underscores_**"#;
         let expected = "asterisks and underscores";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
     fn strikethrough() {
         let markdown = r#"This was ~~erased~~ deleted."#;
         let expected = "This was  deleted.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -176,7 +175,7 @@ End paragraph."#;
 5. And another item.
 
 End paragraph.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -193,7 +192,7 @@ End paragraph.";
 \t• one
 \t• two
 • gamma";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -206,14 +205,14 @@ End paragraph.";
 
 • alpha
 • beta"#;
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
     fn basic_link() {
         let markdown = "I'm an [inline-style link](https://www.google.com).";
         let expected = "I'm an inline-style link.";
-        assert_eq!(strip_markdown(markdown), expected)
+        assert_eq!(convert(markdown), expected)
     }
 
     #[ignore]
@@ -221,21 +220,21 @@ End paragraph.";
     fn link_with_itself() {
         let markdown = "Go to [https://www.google.com].";
         let expected = "Go to https://www.google.com.";
-        assert_eq!(strip_markdown(markdown), expected)
+        assert_eq!(convert(markdown), expected)
     }
 
     #[test]
     fn basic_image() {
         let markdown = "As displayed in ![img alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png).";
         let expected = "As displayed in img alt text.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
     fn inline_code() {
         let markdown = "This is `inline code`.";
         let expected = "This is inline code.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -252,7 +251,7 @@ var s = "JavaScript syntax highlighting";
 alert(s);
 
 End paragraph."#;
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -268,7 +267,7 @@ End paragraph."#;
 Blockquotes are very handy in email to emulate reply text. This line is part of the same quote.
 
 End paragraph.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 
     #[test]
@@ -279,6 +278,6 @@ Paragraph 2."#;
         let expected = "Paragraph 1.
 
 Paragraph 2.";
-        assert_eq!(strip_markdown(markdown), expected);
+        assert_eq!(convert(markdown), expected);
     }
 }

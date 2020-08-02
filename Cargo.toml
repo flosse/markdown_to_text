@@ -1,14 +1,13 @@
 [package]
-name = "strip_markdown"
-version = "0.2.0"
-authors = ["Arran France <arran@arranfrance.com>"]
+name = "markdown_to_text"
+version = "0.1.0"
+authors = ["Florent Bécart <florent.becart@gmail.com>"]
 edition = "2018"
-description = "A simple crate to remove markdown syntax from markdown files."
-repository = "https://github.com/arranf/strip-markdown"
+description = "Converts Markdown to plain text."
+repository = "https://github.com/fbecart/markdown_to_text"
 readme = "README.md"
 keywords = ["Markdown"]
 license = "MIT"
 
 [dependencies]
-pulldown-cmark = "0.7.0"
-log = "0.4.8"
+pulldown-cmark = "0.7"

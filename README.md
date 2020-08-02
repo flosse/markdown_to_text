@@ -1,12 +1,17 @@
-# Strip Markdown
+# Markdown to text
 
-This is a Rust library to remove markdown.
-Behind the scenes it parses markdown using the [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) [crate](https://crates.io/crates/pulldown-cmark).
+This Rust library converts Markdown to plain text.
 
 ## Usage
-```rust
-extern crate strip_markdown;
-use strip_markdown::*;
 
-let stripped = strip_markdown(&my_markdown);
+Add to your `Cargo.toml`
+
+```toml
+[dependencies]
+markdown_to_text = '1.0'
+```
+
+```rust
+let markdown: String = [...];
+let plain_text: String = markdown_to_text::convert(&markdown);
 ```
