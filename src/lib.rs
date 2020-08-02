@@ -19,12 +19,12 @@ pub fn strip_markdown(markdown: &str) -> String {
         match event {
             // The start and end events don't contain the text inside the tag. That's handled by the `Event::Text` arm.
             Event::Start(tag) => {
-                start_tag(&tag, &mut buffer);
+                start_tag(&tag, &mut buffer, &mut tags_stack);
                 tags_stack.push(tag);
             }
             Event::End(tag) => {
-                end_tag(&tag, &mut buffer);
                 tags_stack.pop();
+                end_tag(&tag, &mut buffer, &tags_stack);
             }
             Event::Text(content) => {
                 if !tags_stack.iter().any(is_strikethrough) {
@@ -39,18 +39,52 @@ pub fn strip_markdown(markdown: &str) -> String {
     buffer.trim().to_string()
 }
 
-fn start_tag(tag: &Tag, buffer: &mut String) {
+fn start_tag(tag: &Tag, buffer: &mut String, tags_stack: &mut Vec<Tag>) {
     match tag {
         Tag::Link(_, _, title) | Tag::Image(_, _, title) => buffer.push_str(&title),
-        Tag::Item => buffer.push_str("• "),
+        Tag::Item => {
+            buffer.push('\n');
+            let mut lists_stack = tags_stack
+                .iter_mut()
+                .filter_map(|tag| match tag {
+                    Tag::List(nb) => Some(nb),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let prefix_tabs_count = lists_stack.len() - 1;
+            for _ in 0..prefix_tabs_count {
+                buffer.push('\t')
+            }
+            if let Some(Some(nb)) = lists_stack.last_mut() {
+                buffer.push_str(&nb.to_string());
+                buffer.push_str(". ");
+                *nb += 1;
+            } else {
+                buffer.push_str("• ");
+            }
+        }
+        Tag::Paragraph | Tag::CodeBlock(_) | Tag::Heading(_) => buffer.push('\n'),
         _ => (),
     }
 }
 
-fn end_tag(tag: &Tag, buffer: &mut String) {
+fn end_tag(tag: &Tag, buffer: &mut String, tags_stack: &[Tag]) {
     match tag {
-        Tag::Paragraph | Tag::Table(_) | Tag::Heading(_) | Tag::List(_) => buffer.push_str("\n\n"),
-        Tag::CodeBlock(_) | Tag::TableHead | Tag::TableRow | Tag::Item => buffer.push('\n'),
+        Tag::Paragraph | Tag::Heading(_) => buffer.push('\n'),
+        Tag::CodeBlock(_) => {
+            if buffer.chars().last() != Some('\n') {
+                buffer.push('\n');
+            }
+        }
+        Tag::List(_) => {
+            let is_sublist = tags_stack.iter().any(|tag| match tag {
+                Tag::List(_) => true,
+                _ => false,
+            });
+            if !is_sublist {
+                buffer.push('\n')
+            }
+        }
         _ => (),
     }
 }
@@ -83,8 +117,12 @@ mod tests {
     fn basic_header() {
         let markdown = r#"# Header
 
+## Sub header
+
 End paragraph."#;
         let expected = "Header
+
+Sub header
 
 End paragraph.";
         assert_eq!(strip_markdown(markdown), expected);
@@ -119,30 +157,42 @@ End paragraph.";
 
     #[test]
     fn mixed_list() {
-        let markdown = r#"
+        let markdown = r#"Start paragraph.
+
 1. First ordered list item
 2. Another item
 1. Actual numbers don't matter, just that it's a number
   1. Ordered sub-list
 4. And another item.
-"#;
 
-        let expected = r#"• First ordered list item
-• Another item
-• Actual numbers don't matter, just that it's a number
-• Ordered sub-list
-• And another item."#;
+End paragraph."#;
+
+        let expected = "Start paragraph.
+
+1. First ordered list item
+2. Another item
+3. Actual numbers don't matter, just that it's a number
+4. Ordered sub-list
+5. And another item.
+
+End paragraph.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
     #[test]
-    fn basic_list() {
+    fn nested_lists() {
         let markdown = r#"
 * alpha
 * beta
+    * one
+    * two
+* gamma
 "#;
-        let expected = r#"• alpha
-• beta"#;
+        let expected = "• alpha
+• beta
+\t• one
+\t• two
+• gamma";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
