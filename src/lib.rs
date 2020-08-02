@@ -10,6 +10,7 @@ pub fn strip_markdown(markdown: &str) -> String {
     options.insert(Options::ENABLE_STRIKETHROUGH);
 
     let parser = Parser::new_ext(&markdown, options);
+    let mut tags_stack = Vec::new();
     let mut buffer = String::new();
 
     // For each event we push into the buffer to produce the 'stripped' version.
@@ -17,9 +18,20 @@ pub fn strip_markdown(markdown: &str) -> String {
         debug!("{:?}", event);
         match event {
             // The start and end events don't contain the text inside the tag. That's handled by the `Event::Text` arm.
-            Event::Start(tag) => start_tag(&tag, &mut buffer),
-            Event::End(tag) => end_tag(&tag, &mut buffer),
-            Event::Text(content) | Event::Code(content) => buffer.push_str(&content),
+            Event::Start(tag) => {
+                start_tag(&tag, &mut buffer);
+                tags_stack.push(tag);
+            }
+            Event::End(tag) => {
+                end_tag(&tag, &mut buffer);
+                tags_stack.pop();
+            }
+            Event::Text(content) => {
+                if !tags_stack.iter().any(is_strikethrough) {
+                    buffer.push_str(&content)
+                }
+            }
+            Event::Code(content) => buffer.push_str(&content),
             Event::SoftBreak => buffer.push(' '),
             _ => (),
         }
@@ -40,6 +52,13 @@ fn end_tag(tag: &Tag, buffer: &mut String) {
         Tag::Paragraph | Tag::Table(_) | Tag::Heading(_) | Tag::List(_) => buffer.push_str("\n\n"),
         Tag::CodeBlock(_) | Tag::TableHead | Tag::TableRow | Tag::Item => buffer.push('\n'),
         _ => (),
+    }
+}
+
+fn is_strikethrough(tag: &Tag) -> bool {
+    match tag {
+        Tag::Strikethrough => true,
+        _ => false,
     }
 }
 
@@ -94,7 +113,7 @@ End paragraph.";
     #[test]
     fn strikethrough() {
         let markdown = r#"This was ~~erased~~ deleted."#;
-        let expected = "This was erased deleted.";
+        let expected = "This was  deleted.";
         assert_eq!(strip_markdown(markdown), expected);
     }
 
