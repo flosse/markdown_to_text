@@ -2,7 +2,7 @@
 name = "markdown_to_text"
 version = "1.0.0"
 authors = ["Florent Bécart <florent.becart@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Converts Markdown to plain text."
 repository = "https://github.com/fbecart/markdown_to_text"
 readme = "README.md"
@@ -10,4 +10,4 @@ keywords = ["Markdown"]
 license = "MIT"
 
 [dependencies]
-pulldown-cmark = "0.7"
+pulldown-cmark = "0.9.3"
